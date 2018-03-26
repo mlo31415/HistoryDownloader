@@ -50,7 +50,7 @@ wait.until(EC.presence_of_element_located((By.ID, 'revision-list')))
 
 # Get the history list
 div=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody')
-historyList=div.find_elements_by_xpath("tr")[1:]    # The first row is column headers, so skip them.
+historyElements=div.find_elements_by_xpath("tr")[1:]    # The first row is column headers, so skip them.
 
 # Note that the history list is from newest to oldest
 # The structure of a line is
@@ -64,12 +64,14 @@ historyList=div.find_elements_by_xpath("tr")[1:]    # The first row is column he
 rec=Regex.compile("^"                       # Start at the beginning
                 "(\d+). "                   # Look for a number at least one digit long followed by a period and space
                 "([A-Z])"                   # Look for a single capital letter
-                "( V S | V S R )"           # Look for either ' V S ' or ' V S R '
+                "( V S R | V S )"           # Look for either ' V S ' or ' V S R '
                 "(.*)"                      # Look for a name
                 "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form '20 Feb 2017'
                 "(.*)$")                    # Look for an optional comment
 
-for el in historyList:
+historyList=[]
+HistoryLine=collections.namedtuple("HistoryLine", "Number, Type, Name, Date, Other")
+for el in historyElements:
     t=el.text
     m=rec.match(t)
     # The greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as th used name ending in a space followed by a single digit.
@@ -77,7 +79,10 @@ for el in historyList:
     gps=m.groups()
     t=gps[3]
     if t[-2:-1] == " " and t[-1:].isdigit():
-        gps=(gps[0], gps[1], gps[2], gps[3][:-2], t[-1:]+gps[4], gps[5])
+        gps=(gps[0], gps[1], gps[3][:-2], t[-1:]+gps[4], gps[5])
+    else:
+        gps=(gps[0], gps[1], gps[3], gps[4], gps[5])
+    historyList.append(HistoryLine(*gps))
     i=0
 
 i=0
