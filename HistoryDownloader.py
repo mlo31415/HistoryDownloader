@@ -1,6 +1,8 @@
 import re as Regex
 import collections
 import xml.etree.ElementTree as ET
+import os
+import pathlib
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
@@ -47,7 +49,9 @@ from selenium.webdriver.support import expected_conditions as EC
 #     own internal web browser.)
 
 # Read and save the history of one page.
-def CreatePageHistory(browser, pageName):
+# Directory is root of all history
+def CreatePageHistory(browser, pageName, directory):
+
     # Open the Fancy 3 page
     browser.get("http://fancyclopedia.org/"+pageName)
     # Find the history button and press it
@@ -109,10 +113,19 @@ def CreatePageHistory(browser, pageName):
         el.text=str(gps[5])
         # And write the xml out to file <localName>.xml.
         tree=ET.ElementTree(root)
-        tree.write(pageName+".xml")
+
+        # OK, we have everything.  Start writing it out.
+        d1=pageName[0]
+        d2=d1
+        if len(pageName) > 1:
+            d2=pageName[1]
+
+        dir=os.path.join(directory, d1, d2, pageName)
+        pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+        tree.write(os.path.join(dir, "metadata.xml"))
         i=0
 
 
 browser=webdriver.Firefox()
-CreatePageHistory(browser, "test")
+CreatePageHistory(browser, "test", ".")
 i=0
