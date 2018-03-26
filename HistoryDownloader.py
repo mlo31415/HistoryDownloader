@@ -34,11 +34,11 @@ from selenium.webdriver.support import expected_conditions as EC
 #   (The history pages are the result of javascript running and not html, so we can't use Beautiful Soup. We will try to use Selenium, which essentially contains its
 #     own internal web browser.)
 
-# Start developing the code by figuring out how to read the history of *one* page (randomly selected to be "Balticon 7").
+# Start developing the code by figuring out how to read the history of *one* test page.
 
 # Open the Fancy 3 page
 browser = webdriver.Firefox()
-browser.get("http://fancyclopedia.org/balticon-7")
+browser.get("http://fancyclopedia.org/test")
 
 # Find the history button and press it
 elem = browser.find_element_by_id('history-button')
@@ -70,8 +70,9 @@ rec=Regex.compile("^"                       # Start at the beginning
                 "(.*)$")                    # Look for an optional comment
 
 historyList=[]
-HistoryLine=collections.namedtuple("HistoryLine", "Number, Type, Name, Date, Other")
+HistoryLine=collections.namedtuple("HistoryLine", "Number, ID, Type, Name, Date, Other")
 for el in historyElements:
+    id=el.get_attribute("id").replace("revision-row", "")
     t=el.text
     m=rec.match(t)
     # The greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as th used name ending in a space followed by a single digit.
@@ -79,9 +80,9 @@ for el in historyElements:
     gps=m.groups()
     t=gps[3]
     if t[-2:-1] == " " and t[-1:].isdigit():
-        gps=(gps[0], gps[1], gps[3][:-2], t[-1:]+gps[4], gps[5])
+        gps=(gps[0], id, gps[1], gps[3][:-2], t[-1:]+gps[4], gps[5])
     else:
-        gps=(gps[0], gps[1], gps[3], gps[4], gps[5])
+        gps=(gps[0], id, gps[1], gps[3], gps[4], gps[5])
     historyList.append(HistoryLine(*gps))
     i=0
 
