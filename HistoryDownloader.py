@@ -3,6 +3,8 @@ import collections
 import xml.etree.ElementTree as ET
 import os
 import pathlib
+import Helpers
+import urllib.request
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
@@ -55,14 +57,17 @@ from selenium.webdriver.support import expected_conditions as EC
 # Directory is root of all history
 def CreatePageHistory(browser, pageName, directory):
 
-    # Open the Fancy 3 page
+    # Open the Fancy 3 page in the browser
     browser.get("http://fancyclopedia.org/"+pageName)
+
     # Find the history button and press it
     elem=browser.find_element_by_id('history-button')
     elem.send_keys(Keys.RETURN)
+
     # Wait until the history list has loaded
     wait=WebDriverWait(browser, 10)
     wait.until(EC.presence_of_element_located((By.ID, 'revision-list')))
+
     # Get the history list
     div=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody')
     historyElements=div.find_elements_by_xpath("tr")[1:]  # The first row is column headers, so skip them.
@@ -136,7 +141,28 @@ def CreatePageHistory(browser, pageName, directory):
 
         i=0
 
+    # Download the files currently attached to this page
+    # Find the files button and press it
+    elem=browser.find_element_by_id('files-button')
+    elem.send_keys(Keys.RETURN)
 
+    # Wait until the history list has loaded
+    wait=WebDriverWait(browser, 10)
+    wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'page-files')))
+    try:
+        el=browser.find_element_by_class_name("page-files").find_elements_by_tag_name("tr")[1:]
+        h=el[0].get_attribute("outerHTML")
+        url, linktext=Helpers.GetHrefAndTextFromString(h)
+        urllib.request.urlretrieve("http://fancyclopedia.org"+url, "C:/Users/mlo/Documents/usr/Fancyclopedia/Python/HistoryDownloader/t/e/test/"+linktext)
+        i=0
+    except:
+        el=None
+
+
+
+    return
+
+# Do it!
 browser=webdriver.Firefox()
 CreatePageHistory(browser, "test", ".")
 i=0
