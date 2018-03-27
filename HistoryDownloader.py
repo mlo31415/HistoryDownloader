@@ -98,12 +98,13 @@ def CreatePageHistory(browser, pageName, directory):
 
         # Click on the view source button for this row
         el.find_elements_by_tag_name("td")[3].find_elements_by_tag_name("a")[1].click()
-        source=div.find_element_by_xpath('//*[@id="history-subarea"]/div').text
+        source=div.find_element_by_xpath('//*[@id="history-subarea"]/div').text     # TODO: Make sure that we don't have to put a wait before this
 
         # Write out the xml data
         root=ET.Element("data")
         el=ET.SubElement(root, "number")
-        el.text=str(gps[0])
+        number=str(gps[0])
+        el.text=number
         el=ET.SubElement(root, "ID")
         el.text=str(id)
         el=ET.SubElement(root, "type")
@@ -124,7 +125,8 @@ def CreatePageHistory(browser, pageName, directory):
             d2=pageName[1]
 
         # Make sure the target directory exists
-        dir=os.path.join(directory, d1, d2, pageName)
+        seq=("0000"+number)[-4:]
+        dir=os.path.join(directory, d1, d2, pageName, "V"+seq)
         pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
 
         # Write the directory contents
