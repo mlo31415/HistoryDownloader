@@ -5,6 +5,8 @@ import os
 import pathlib
 import Helpers
 import urllib.request
+import unidecode
+from xmlrpc import client
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
@@ -59,6 +61,11 @@ def CreatePageHistory(browser, pageName, directory):
 
     # Open the Fancy 3 page in the browser
     browser.get("http://fancyclopedia.org/"+pageName)
+
+    # Page found?
+    errortext="The page <em>"+pageName.replace("_", "-")+"</em> you want to access does not exist."
+    if errortext in browser.page_source:
+        return
 
     # Find the history button and press it
     elem=browser.find_element_by_id('history-button')
@@ -137,7 +144,7 @@ def CreatePageHistory(browser, pageName, directory):
         # Write the directory contents
         tree.write(os.path.join(dir, "metadata.xml"))
         with open(os.path.join(dir, "source.txt"), 'a') as file:
-            file.write(source)
+            file.write(unidecode.unidecode_expect_nonascii(source))
 
         i=0
 
@@ -148,7 +155,7 @@ def CreatePageHistory(browser, pageName, directory):
 
     # Wait until the history list has loaded
     wait=WebDriverWait(browser, 10)
-    wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'page-files')))
+    #wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'page-files')))
     try:
         el=browser.find_element_by_class_name("page-files").find_elements_by_tag_name("tr")[1:]
         h=el[0].get_attribute("outerHTML")
@@ -163,6 +170,20 @@ def CreatePageHistory(browser, pageName, directory):
     return
 
 # Do it!
+
+# Get the magic URL for api access
+url=open("url.txt").read()
+
+# Now, get list of recently modified pages.  It will be ordered from least-recently-updated to most.
+# (We're using composition, here.)
+print("Get list of all pages from Wikidot, sorted from most- to least-recently-updated")
+listOfAllWikiPages=client.ServerProxy(url).pages.select({"site" : "fancyclopedia", "order": "updated_at"})
+listOfAllWikiPages=[name.replace(":", "_", 1) for name in listOfAllWikiPages]   # ':' is used for non-standard namespaces on wiki. Replace the first ":" with "_" in all page names because ':' is invalid in Windows file names
+listOfAllWikiPages=[name if name != "con" else "con-" for name in listOfAllWikiPages]   # Handle the "con" special case
+
 browser=webdriver.Firefox()
-CreatePageHistory(browser, "test", ".")
+
+for pageName in listOfAllWikiPages:
+    CreatePageHistory(browser, pageName, ".")
+
 i=0
