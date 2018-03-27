@@ -34,7 +34,10 @@ from selenium.webdriver.support import expected_conditions as EC
 #           <title>  (the page's title)
 #           <files_deleted>  (if a file was deleted, its name)
 #           <file_list>  (a list of the files attached to thie version of this page
-#   files  -- if any files were added, the actual new files (Note that we don't keep multiple copies of files and the full set of files must be gotten by looking backwards)
+#   tags -- Tags are not saved as part of the hitsory, but the versions when the tags arec hanged (added or deleted) is documented in the version comments
+#   files  -- Files don't seem to be kept as part of history.  The only files we have access to are those that are in the current version.
+#             These files will be saved at the top level.
+#             The history of *when* they were added exists in the comments for file add versions.
 
 # Our overall strategy will be to work in two phases.
 #   In the first phase -- initial creation of the local site history -- we will run through the pages from least-recently-updated to most-recently-updated
@@ -76,24 +79,24 @@ def CreatePageHistory(browser, pageName, directory):
                       "([A-Z])"  # Look for a single capital letter
                       "( V S R | V S )"  # Look for either ' V S ' or ' V S R '
                       "(.*)"  # Look for a name
-                      "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form '20 Feb 2017'
+                      "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form 'dd mmm yyyy'
                       "(.*)$")  # Look for an optional comment
 
     for el in historyElements:
         id=el.get_attribute("id").replace("revision-row-", "")
         t=el.text
         m=rec.match(t)
-        # The greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
-        # Fix this
         gps=m.groups()
-        t=gps[3]
-        name=gps[3]
+
+        # The greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
+        # Fix this if necessary
+        user=gps[3]
         date=gps[4]
-        if t[-2:-1]==" " and t[-1:].isdigit():
-            name=t[:-2]
-            date=t[-1:]+gps[4]
+        if user[-2:-1]==" " and user[-1:].isdigit():
+            date=user[-1:]+gps[4]
+            user=user[:-2]
 
-
+        # Click on the view source button for this row
         el.find_elements_by_tag_name("td")[3].find_elements_by_tag_name("a")[1].click()
         source=div.find_element_by_xpath('//*[@id="history-subarea"]/div').text
 
@@ -106,10 +109,10 @@ def CreatePageHistory(browser, pageName, directory):
         el=ET.SubElement(root, "type")
         el.text=str(gps[1])
         el=ET.SubElement(root, "name")
-        el.text=str(name)
+        el.text=str(user)
         el=ET.SubElement(root, "date")
         el.text=str(date)
-        el=ET.SubElement(root, "other")
+        el=ET.SubElement(root, "comment")
         el.text=str(gps[5])
         # And write the xml out to file <localName>.xml.
         tree=ET.ElementTree(root)
@@ -120,9 +123,15 @@ def CreatePageHistory(browser, pageName, directory):
         if len(pageName) > 1:
             d2=pageName[1]
 
+        # Make sure the target directory exists
         dir=os.path.join(directory, d1, d2, pageName)
         pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+
+        # Write the directory contents
         tree.write(os.path.join(dir, "metadata.xml"))
+        with open(os.path.join(dir, "source.txt"), 'a') as file:
+            file.write(source)
+
         i=0
 
 
