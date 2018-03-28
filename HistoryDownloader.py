@@ -215,6 +215,8 @@ def CreatePageHistory(browser, pageName, directory):
 #===================================================================================
 #  Do it!
 
+historyDirectory="."
+
 browser=webdriver.Firefox()
 
 # Get the magic URL for api access
@@ -227,9 +229,15 @@ listOfAllWikiPages=client.ServerProxy(url).pages.select({"site" : "fancyclopedia
 listOfAllWikiPages=[name.replace(":", "_", 1) for name in listOfAllWikiPages]   # ':' is used for non-standard namespaces on wiki. Replace the first ":" with "_" in all page names because ':' is invalid in Windows file names
 listOfAllWikiPages=[name if name != "con" else "con-" for name in listOfAllWikiPages]   # Handle the "con" special case
 
+# Get the list of already-handled pages
+with open(os.path.join(historyDirectory, "donelist.txt")) as f:
+    donePages = f.readlines()
+donePages = [x.strip() for x in donePages]  # Remove trailing '\n'
 
 for pageName in listOfAllWikiPages:
+    if pageName in donePages:
+        continue
     print("   Getting: "+pageName)
-    CreatePageHistory(browser, pageName, ".")
+    CreatePageHistory(browser, pageName, historyDirectory)
 
 i=0
