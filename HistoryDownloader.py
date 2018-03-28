@@ -89,6 +89,9 @@ def CreatePageHistory(browser, pageName, directory):
             print("***Oops. Exception while looking for pager div in "+pageName)
             return
 
+        if pagerDiv == None and not firstTime:
+            break
+
         # If there are multiple pages of history, then before starting the second and subsequent loops, we need to go to the next page
         if pagerDiv != None and not firstTime:
             # Find the current page indicator
@@ -202,14 +205,17 @@ def CreatePageHistory(browser, pageName, directory):
     except:
         el=None
 
-
+    # Update the donelist
+    with open(os.path.join(directory, "donelist.txt"), 'a') as file:
+        file.write(pageName+"\n")
 
     return
 
-# Do it!
+#===================================================================================
+#===================================================================================
+#  Do it!
 
 browser=webdriver.Firefox()
-CreatePageHistory(browser, "bloch", ".")
 
 # Get the magic URL for api access
 url=open("url.txt").read()
@@ -222,8 +228,8 @@ listOfAllWikiPages=[name.replace(":", "_", 1) for name in listOfAllWikiPages]   
 listOfAllWikiPages=[name if name != "con" else "con-" for name in listOfAllWikiPages]   # Handle the "con" special case
 
 
-
 for pageName in listOfAllWikiPages:
+    print("   Getting: "+pageName)
     CreatePageHistory(browser, pageName, ".")
 
 i=0
