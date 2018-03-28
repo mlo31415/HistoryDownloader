@@ -129,7 +129,7 @@ def CreatePageHistory(browser, pageName, directory):
                           "(.*)$")  # Look for an optional comment
 
         i=0
-        while i < len(historyElements)-1:  # We do this kludge because we need to continually refresh historyElements. While it may become stale, at least it doesn't change size
+        while i < len(historyElements):  # We do this kludge because we need to continually refresh historyElements. While it may become stale, at least it doesn't change size
             # Regenerate the history list, as it may have become stale
             historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
             historyElements=historyElements[1:]  # The first row is column headers, so skip them.
@@ -215,7 +215,7 @@ def CreatePageHistory(browser, pageName, directory):
 #===================================================================================
 #  Do it!
 
-historyDirectory="."
+historyDirectory="I:\Fancyclopedia History"
 
 browser=webdriver.Firefox()
 
@@ -230,8 +230,10 @@ listOfAllWikiPages=[name.replace(":", "_", 1) for name in listOfAllWikiPages]   
 listOfAllWikiPages=[name if name != "con" else "con-" for name in listOfAllWikiPages]   # Handle the "con" special case
 
 # Get the list of already-handled pages
-with open(os.path.join(historyDirectory, "donelist.txt")) as f:
-    donePages = f.readlines()
+donePages=[]
+if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
+    with open(os.path.join(historyDirectory, "donelist.txt")) as f:
+        donePages = f.readlines()
 donePages = [x.strip() for x in donePages]  # Remove trailing '\n'
 
 ignorePages=["system_list-all-pages", "forum_thread", "forum_start", "forum_category", "forum_recent-posts", "forum_recent-threads", "forum_new-thread", "search_site", "admin_manage"]
