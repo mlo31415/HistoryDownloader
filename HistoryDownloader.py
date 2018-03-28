@@ -12,6 +12,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common import exceptions as SeEx
 
 # Program to download the complete history of a Wikidot wiki and maintain a local copy.
 # The downloads are incremental and restartable.
@@ -68,85 +69,121 @@ def CreatePageHistory(browser, pageName, directory):
         return
 
     # Find the history button and press it
-    elem=browser.find_element_by_id('history-button')
-    elem.send_keys(Keys.RETURN)
+    browser.find_element_by_id('history-button').send_keys(Keys.RETURN)
 
     # Wait until the history list has loaded
-    wait=WebDriverWait(browser, 10)
-    wait.until(EC.presence_of_element_located((By.ID, 'revision-list')))
+    WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, 'revision-list')))
 
-    # Get the history list
-    div=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody')
-    historyElements=div.find_elements_by_xpath("tr")[1:]  # The first row is column headers, so skip them.
-    # Note that the history list is from newest to oldest
-    # The structure of a line is
-    #       The revision number followed by a "."
-    #       A series of single letters (these letters label buttons)
-    #       The name of the person who updated it
-    #       The date
-    #       An optional comment
-    # This calls for a Regex
-    rec=Regex.compile("^"  # Start at the beginning
-                      "(\d+). "  # Look for a number at least one digit long followed by a period and space
-                      "([A-Z])"  # Look for a single capital letter
-                      "( V S R | V S )"  # Look for either ' V S ' or ' V S R '
-                      "(.*)"  # Look for a name
-                      "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form 'dd mmm yyyy'
-                      "(.*)$")  # Look for an optional comment
+    # Step over the pages of history lines (if any)
+    # The pages are a series of spans creating a series of boxes, each with a number in it.  There is a box labeled "current" and we want to click on the *next* box.
+    firstTime=True
+    terminate=False
+    while not terminate:
 
-    for el in historyElements:
-        id=el.get_attribute("id").replace("revision-row-", "")
-        t=el.text
-        m=rec.match(t)
-        gps=m.groups()
+        # There may be a "pager" -- a series of buttons to show successive pages of history
+        try:
+            pagerDiv=browser.find_element_by_xpath('//*[@id="revision-list"]/div')
+        except SeEx.NoSuchElementException:
+            pagerDiv=None
+        except:
+            print("***Oops. Exception while looking for pager div in "+pageName)
+            return
 
-        # The greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
-        # Fix this if necessary
-        user=gps[3]
-        date=gps[4]
-        if user[-2:-1]==" " and user[-1:].isdigit():
-            date=user[-1:]+gps[4]
-            user=user[:-2]
+        # If there are multiple pages of history, then before starting the second and subsequent loops, we need to go to the next page
+        if pagerDiv != None and not firstTime:
+            # Find the current page indicator
+            els=pagerDiv.find_elements_by_tag_name("span")
+            # And click the *next*, if any, to go to the next page
+            for i in range(0, len(els)):
+                if els[i].get_attribute("class") == "current":
+                    if i+1 < len(els):
+                        els[i+1].find_element_by_tag_name("a").send_keys(Keys.RETURN)
+                    else:
+                        terminate=True
+                    break
+            if terminate:
+                break
 
-        # Click on the view source button for this row
-        el.find_elements_by_tag_name("td")[3].find_elements_by_tag_name("a")[1].click()
-        source=div.find_element_by_xpath('//*[@id="history-subarea"]/div').text     # TODO: Make sure that we don't have to put a wait before this
+        firstTime=False
+        # Get the history list
+        historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
+        historyElements=historyElements[1:]  # The first row is column headers, so skip them.
 
-        # Write out the xml data
-        root=ET.Element("data")
-        el=ET.SubElement(root, "number")
-        number=str(gps[0])
-        el.text=number
-        el=ET.SubElement(root, "ID")
-        el.text=str(id)
-        el=ET.SubElement(root, "type")
-        el.text=str(gps[1])
-        el=ET.SubElement(root, "name")
-        el.text=str(user)
-        el=ET.SubElement(root, "date")
-        el.text=str(date)
-        el=ET.SubElement(root, "comment")
-        el.text=str(gps[5])
-        # And write the xml out to file <localName>.xml.
-        tree=ET.ElementTree(root)
-
-        # OK, we have everything.  Start writing it out.
-        d1=pageName[0]
-        d2=d1
-        if len(pageName) > 1:
-            d2=pageName[1]
-
-        # Make sure the target directory exists
-        seq=("0000"+number)[-4:]
-        dir=os.path.join(directory, d1, d2, pageName, "V"+seq)
-        pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
-
-        # Write the directory contents
-        tree.write(os.path.join(dir, "metadata.xml"))
-        with open(os.path.join(dir, "source.txt"), 'a') as file:
-            file.write(unidecode.unidecode_expect_nonascii(source))
+        # Note that the history list is from newest to oldest, but we don't care since we traverse them all
+        # The structure of a line is
+        #       The revision number followed by a "."
+        #       A series of single letters (these letters label buttons)
+        #       The name of the person who updated it
+        #       The date
+        #       An optional comment
+        # This calls for a Regex
+        rec=Regex.compile("^"  # Start at the beginning
+                          "(\d+). "  # Look for a number at least one digit long followed by a period and space
+                          "([A-Z])"  # Look for a single capital letter
+                          "( V S R | V S )"  # Look for either ' V S ' or ' V S R '
+                          "(.*)"  # Look for a name
+                          "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form 'dd mmm yyyy'
+                          "(.*)$")  # Look for an optional comment
 
         i=0
+        while i < len(historyElements)-1:  # We do this kludge because we need to continually refresh historyElements. While it may become stale, at least it doesn't change size
+            # Regenerate the history list, as it may have become stale
+            historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
+            historyElements=historyElements[1:]  # The first row is column headers, so skip them.
+            el=historyElements[i]
+            id=el.get_attribute("id").replace("revision-row-", "")
+            t=el.text
+            m=rec.match(t)
+            gps=m.groups()
+
+            # The Regex greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
+            # Fix this if necessary
+            user=gps[3]
+            date=gps[4]
+            if user[-2:-1]==" " and user[-1:].isdigit():
+                date=user[-1:]+gps[4]
+                user=user[:-2]
+
+            # Click on the view source button for this row
+            el.find_elements_by_tag_name("td")[3].find_elements_by_tag_name("a")[1].click()
+            div=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody')
+            source=div.find_element_by_xpath('//*[@id="history-subarea"]/div').text     # TODO: Make sure that we don't have to put a wait before this
+
+            # Write out the xml data
+            root=ET.Element("data")
+            el=ET.SubElement(root, "number")
+            number=str(gps[0])
+            el.text=number
+            el=ET.SubElement(root, "ID")
+            el.text=str(id)
+            el=ET.SubElement(root, "type")
+            el.text=str(gps[1])
+            el=ET.SubElement(root, "name")
+            el.text=str(user)
+            el=ET.SubElement(root, "date")
+            el.text=str(date)
+            el=ET.SubElement(root, "comment")
+            el.text=str(gps[5])
+            # And write the xml out to file <localName>.xml.
+            tree=ET.ElementTree(root)
+
+            # OK, we have everything.  Start writing it out.
+            d1=pageName[0]
+            d2=d1
+            if len(pageName) > 1:
+                d2=pageName[1]
+
+            # Make sure the target directory exists
+            seq=("0000"+number)[-4:]
+            dir=os.path.join(directory, d1, d2, pageName, "V"+seq)
+            pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+
+            # Write the directory contents
+            tree.write(os.path.join(dir, "metadata.xml"))
+            with open(os.path.join(dir, "source.txt"), 'a') as file:
+                file.write(unidecode.unidecode_expect_nonascii(source))
+
+            i=i+1
 
     # Download the files currently attached to this page
     # Find the files button and press it
@@ -171,6 +208,9 @@ def CreatePageHistory(browser, pageName, directory):
 
 # Do it!
 
+browser=webdriver.Firefox()
+CreatePageHistory(browser, "bloch", ".")
+
 # Get the magic URL for api access
 url=open("url.txt").read()
 
@@ -181,7 +221,7 @@ listOfAllWikiPages=client.ServerProxy(url).pages.select({"site" : "fancyclopedia
 listOfAllWikiPages=[name.replace(":", "_", 1) for name in listOfAllWikiPages]   # ':' is used for non-standard namespaces on wiki. Replace the first ":" with "_" in all page names because ':' is invalid in Windows file names
 listOfAllWikiPages=[name if name != "con" else "con-" for name in listOfAllWikiPages]   # Handle the "con" special case
 
-browser=webdriver.Firefox()
+
 
 for pageName in listOfAllWikiPages:
     CreatePageHistory(browser, pageName, ".")
