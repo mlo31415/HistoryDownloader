@@ -61,7 +61,7 @@ from selenium.common import exceptions as SeEx
 def CreatePageHistory(browser, pageName, directory):
 
     # Open the Fancy 3 page in the browser
-    browser.get("http://fancyclopedia.org/"+pageName)
+    browser.get("http://fancyclopedia.org/"+pageName+"/noredirect/t")
 
     # Page found?
     errortext="The page <em>"+pageName.replace("_", "-")+"</em> you want to access does not exist."
@@ -234,8 +234,10 @@ with open(os.path.join(historyDirectory, "donelist.txt")) as f:
     donePages = f.readlines()
 donePages = [x.strip() for x in donePages]  # Remove trailing '\n'
 
+ignorePages=["system_list-all-pages", "forum_thread", "forum_start", "forum_category", "forum_recent-posts", "forum_recent-threads", "forum_new-thread", "search_site", "admin_manage"]
+
 for pageName in listOfAllWikiPages:
-    if pageName in donePages:
+    if pageName in donePages or pageName in ignorePages:
         continue
     print("   Getting: "+pageName)
     CreatePageHistory(browser, pageName, historyDirectory)
