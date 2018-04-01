@@ -1,11 +1,11 @@
 import re as Regex
-import collections
 import xml.etree.ElementTree as ET
 import os
 import pathlib
 import Helpers
 import urllib.request
 import unidecode
+import time
 from xmlrpc import client
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -70,6 +70,7 @@ def CreatePageHistory(browser, pageName, directory):
 
     # Find the history button and press it
     browser.find_element_by_id('history-button').send_keys(Keys.RETURN)
+    time.sleep(0.5)     # Just-in-case
 
     # Wait until the history list has loaded
     WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, 'revision-list')))
@@ -109,7 +110,23 @@ def CreatePageHistory(browser, pageName, directory):
 
         firstTime=False
         # Get the history list
-        historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
+        # This while loop, et al, is to allow retries since sometimes it doesn't seem to load in time
+        historyElements=None
+        count=0
+        while historyElements == None and count < 5:
+            try:
+                historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
+                id=historyElements[-1].get_attribute("id").replace("revision-row-", "")   # Just here to trigger an exception if not loaded fully
+                t=historyElements[-1].text   # Just here to trigger an exception if not loaded fully
+            except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException):
+                # Wait and try again
+                time.sleep(1)
+                count=count+1
+                print("... Retrying historyElements")
+        if historyElements == None and count >= 5:
+            print("***Could not get historyElements after five tries.")
+
+
         historyElements=historyElements[1:]  # The first row is column headers, so skip them.
 
         # Note that the history list is from newest to oldest, but we don't care since we traverse them all
@@ -122,7 +139,7 @@ def CreatePageHistory(browser, pageName, directory):
         # This calls for a Regex
         rec=Regex.compile("^"  # Start at the beginning
                           "(\d+). "  # Look for a number at least one digit long followed by a period and space
-                          "([A-Z])"  # Look for a single capital letter
+                          "([A-UW-Z]|[A-Z] [A-UW-Z])"  # Look for a single capital letter or two separated by spaces. We skip the V to avoid conflict with the next pattern
                           "( V S R | V S )"  # Look for either ' V S ' or ' V S R '
                           "(.*)"  # Look for a name
                           "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form 'dd mmm yyyy'
@@ -131,13 +148,31 @@ def CreatePageHistory(browser, pageName, directory):
         i=0
         while i < len(historyElements):  # We do this kludge because we need to continually refresh historyElements. While it may become stale, at least it doesn't change size
             # Regenerate the history list, as it may have become stale
-            historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
-            historyElements=historyElements[1:]  # The first row is column headers, so skip them.
-            el=historyElements[i]
-            id=el.get_attribute("id").replace("revision-row-", "")
-            t=el.text
-            m=rec.match(t)
-            gps=m.groups()
+            # This while loop, et al, is to allow retries since sometimes it doesn't seem to load in time
+            historyElements=None
+            count=0
+            gps=None
+            while historyElements==None and count<5:
+                try:
+                    historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
+                    time.sleep(0.1)
+                    id=historyElements[i+1].get_attribute("id").replace("revision-row-", "")   # This code is here just to trigger an exception if not loaded fully
+                    t=historyElements[i+1].text   # This code is here just to trigger an exception if not loaded fully
+                    historyElements=historyElements[1:]  # The first row is column headers, so skip them.
+
+                    el=historyElements[i]
+                    id=el.get_attribute("id").replace("revision-row-", "")
+                    t=el.text
+                    m=rec.match(t)
+                    gps=m.groups()
+                except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException):
+                    # Wait and try again
+                    time.sleep(1)
+                    count=count+1
+                    print("... Retrying historyElements(2)")
+            if historyElements==None and count>=5:
+                print("***Could not get historyElements(2) after five tries.")
+
 
             # The Regex greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
             # Fix this if necessary
@@ -149,8 +184,31 @@ def CreatePageHistory(browser, pageName, directory):
 
             # Click on the view source button for this row
             el.find_elements_by_tag_name("td")[3].find_elements_by_tag_name("a")[1].click()
-            div=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody')
-            source=div.find_element_by_xpath('//*[@id="history-subarea"]/div').text     # TODO: Make sure that we don't have to put a wait before this
+            # This while loop, et al, is to allow retries since sometimes it doesn't seem to load in time
+            divRevList=None
+            count=0
+            while divRevList == None and count < 5:
+                try:
+                    divRevList=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody')
+                except SeEx.NoSuchElementException:
+                    # Wait and try again
+                    time.sleep(1)
+                    count=count+1
+            if divRevList == None and count >= 5:
+                print("***Could not get divRevList after five tries.")
+
+            source=None
+            count=0
+            while source == None and count < 5:
+                try:
+                    source=divRevList.find_element_by_xpath('//*[@id="history-subarea"]/div').text
+                except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException):
+                    # Wait and try again
+                    time.sleep(1)
+                    count=count+1
+            if source == None and count >= 5:
+                print("***Could not get source after five tries.")
+            del divRevList
 
             # Write out the xml data
             root=ET.Element("data")
@@ -192,6 +250,7 @@ def CreatePageHistory(browser, pageName, directory):
     # Find the files button and press it
     elem=browser.find_element_by_id('files-button')
     elem.send_keys(Keys.RETURN)
+    time.sleep(0.5)     # Just-in-case
 
     # Wait until the history list has loaded
     wait=WebDriverWait(browser, 10)
@@ -236,7 +295,8 @@ if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
         donePages = f.readlines()
 donePages = [x.strip() for x in donePages]  # Remove trailing '\n'
 
-ignorePages=["system_list-all-pages", "forum_thread", "forum_start", "forum_category", "forum_recent-posts", "forum_recent-threads", "forum_new-thread", "search_site", "admin_manage"]
+ignorePages=["system_list-all-pages", "forum_thread", "forum_start", "forum_category", "forum_recent-posts", "forum_recent-threads", "forum_new-thread", "search_site", "admin_manage",
+            "system_page-tags-list", "system_page-tags"]
 
 for pageName in listOfAllWikiPages:
     if pageName in donePages or pageName in ignorePages:
