@@ -139,7 +139,7 @@ def CreatePageHistory(browser, pageName, directory):
         # This calls for a Regex
         rec=Regex.compile("^"  # Start at the beginning
                           "(\d+). "  # Look for a number at least one digit long followed by a period and space
-                          "([A-UW-Z]|[A-Z] [A-UW-Z])"  # Look for a single capital letter or two separated by spaces. We skip the V to avoid conflict with the next pattern
+                          "([A-UW-Z]|[A-Z] [A-UW-Z])"  # Look for a single capital letter or two separated by spaces. We skip the V as the final letter to avoid conflict with the next pattern
                           "( V S R | V S )"  # Look for either ' V S ' or ' V S R '
                           "(.*)"  # Look for a name
                           "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form 'dd mmm yyyy'
@@ -152,7 +152,7 @@ def CreatePageHistory(browser, pageName, directory):
             historyElements=None
             count=0
             gps=None
-            while historyElements==None and count<5:
+            while (historyElements==None or gps is None) and count<5:
                 try:
                     historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
                     time.sleep(0.1)
@@ -165,14 +165,20 @@ def CreatePageHistory(browser, pageName, directory):
                     t=el.text
                     m=rec.match(t)
                     gps=m.groups()
-                except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException):
+                    if gps == None:
+                        print("***gps is None")
+                    if len(gps) < 5:
+                        print("***gps is too short")
+                    user=gps[3]
+                except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException, TypeError):
                     # Wait and try again
                     time.sleep(1)
                     count=count+1
                     print("... Retrying historyElements(2)")
             if historyElements==None and count>=5:
                 print("***Could not get historyElements(2) after five tries.")
-
+            if gps==None:
+                print("***gps is None (2)")
 
             # The Regex greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
             # Fix this if necessary
@@ -296,7 +302,8 @@ if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
 donePages = [x.strip() for x in donePages]  # Remove trailing '\n'
 
 ignorePages=["system_list-all-pages", "forum_thread", "forum_start", "forum_category", "forum_recent-posts", "forum_recent-threads", "forum_new-thread", "search_site", "admin_manage",
-            "system_page-tags-list", "system_page-tags"]
+            "system_page-tags-list", "system_page-tags", "system_members", "nav_top", "index_tagclubs", "index_tagfanzines", "index_tagconventions", "system_recent-changes", "index_characters",
+            "index_unicode-charmap", "admin_sources", "nav_side", "system_join"]
 
 for pageName in listOfAllWikiPages:
     if pageName in donePages or pageName in ignorePages:
