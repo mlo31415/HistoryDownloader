@@ -118,11 +118,11 @@ def CreatePageHistory(browser, pageName, directory):
                 historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
                 id=historyElements[-1].get_attribute("id").replace("revision-row-", "")   # Just here to trigger an exception if not loaded fully
                 t=historyElements[-1].text   # Just here to trigger an exception if not loaded fully
-            except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException):
+            except Exception as exception:
                 # Wait and try again
                 time.sleep(1)
                 count=count+1
-                print("... Retrying historyElements")
+                print("... Retrying historyElements(2): "+type(exception).__name__+"  count="+str(count))
         if historyElements == None and count >= 5:
             print("***Could not get historyElements after five tries.")
 
@@ -138,8 +138,9 @@ def CreatePageHistory(browser, pageName, directory):
         #       An optional comment
         # This calls for a Regex
         rec=Regex.compile("^"  # Start at the beginning
-                          "(\d+). "  # Look for a number at least one digit long followed by a period and space
-                          "([A-UW-Z]|[A-Z] [A-UW-Z])"  # Look for a single capital letter or two separated by spaces. We skip the V as the final letter to avoid conflict with the next pattern
+                          "(\d+)."  # Look for a number at least one digit long followed by a period and space
+                          "( [A-UW-Z]| [A-Z] [A-UW-Z]|)?"  # Look for a single capital letter or two separated by spaces or this could be missing 
+                                                        # We skip the V as the final letter to avoid conflict with the next pattern
                           "( V S R | V S )"  # Look for either ' V S ' or ' V S R '
                           "(.*)"  # Look for a name
                           "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form 'dd mmm yyyy'
@@ -163,6 +164,7 @@ def CreatePageHistory(browser, pageName, directory):
                     el=historyElements[i]
                     id=el.get_attribute("id").replace("revision-row-", "")
                     t=el.text
+                    # print("t='"+t+"'")
                     m=rec.match(t)
                     gps=m.groups()
                     if gps == None:
@@ -170,11 +172,11 @@ def CreatePageHistory(browser, pageName, directory):
                     if len(gps) < 5:
                         print("***gps is too short")
                     user=gps[3]
-                except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException, TypeError):
+                except Exception as exception:
                     # Wait and try again
                     time.sleep(1)
                     count=count+1
-                    print("... Retrying historyElements(2)")
+                    print("... Retrying historyElements(2): "+type(exception).__name__+"  count="+str(count))
             if historyElements==None and count>=5:
                 print("***Could not get historyElements(2) after five tries.")
             if gps==None:
