@@ -286,8 +286,6 @@ historyDirectory="I:\Fancyclopedia History"
 
 browser=webdriver.Firefox()
 
-CreatePageHistory(browser, "Mancunicon", historyDirectory)
-
 # Get the magic URL for api access
 url=open("url.txt").read()
 
