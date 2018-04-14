@@ -264,13 +264,13 @@ def CreatePageHistory(browser, pageName, directory):
     wait=WebDriverWait(browser, 10)
     #wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'page-files')))
     try:
-        el=browser.find_element_by_class_name("page-files").find_elements_by_tag_name("tr")[1:]
-        h=el[0].get_attribute("outerHTML")
-        url, linktext=Helpers.GetHrefAndTextFromString(h)
-        urllib.request.urlretrieve("http://fancyclopedia.org"+url, "C:/Users/mlo/Documents/usr/Fancyclopedia/Python/HistoryDownloader/t/e/test/"+linktext)
-        i=0
+        els=browser.find_element_by_class_name("page-files").find_elements_by_tag_name("tr")
+        for i in range(1, len(els)):
+            h=els[i].get_attribute("outerHTML")
+            url, linktext=Helpers.GetHrefAndTextFromString(h)
+            urllib.request.urlretrieve("http://fancyclopedia.org"+url, os.path.join(os.path.join(directory, d1, d2, pageName, linktext)))
     except:
-        el=None
+        k=0
 
     # Update the donelist
     with open(os.path.join(directory, "donelist.txt"), 'a') as file:
@@ -285,6 +285,8 @@ def CreatePageHistory(browser, pageName, directory):
 historyDirectory="I:\Fancyclopedia History"
 
 browser=webdriver.Firefox()
+
+CreatePageHistory(browser, "Mancunicon", historyDirectory)
 
 # Get the magic URL for api access
 url=open("url.txt").read()
