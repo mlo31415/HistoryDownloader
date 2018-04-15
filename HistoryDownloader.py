@@ -59,7 +59,7 @@ from selenium.common import exceptions as SeEx
 
 # Read and save the history of one page.
 # Directory is root of all history
-def CreatePageHistory(browser, pageName, directory):
+def DownloadPageHistory(browser, directory, pageName):
 
     # Open the Fancy 3 page in the browser
     browser.get("http://fancyclopedia.org/"+pageName+"/noredirect/t")
@@ -74,6 +74,7 @@ def CreatePageHistory(browser, pageName, directory):
     # Page found?
     errortext="The page <em>"+pageName.replace("_", "-")+"</em> you want to access does not exist."
     if errortext in browser.page_source:
+        print("*** Page does not exist: "+pageName)
         return
 
     # Find the history button and press it
@@ -283,6 +284,45 @@ def CreatePageHistory(browser, pageName, directory):
 
     return
 
+#--------------------------------------------------------
+# Read and save the history of one page.
+# Directory is root of all history
+def GetPageDate(browser, directory, pageName):
+
+    # Open the Fancy 3 page in the browser
+    browser.get("http://fancyclopedia.org/"+pageName+"/noredirect/t")
+
+    # Page found?
+    errortext="The page <em>"+pageName.replace("_", "-")+"</em> you want to access does not exist."
+    if errortext in browser.page_source:
+        print("*** Page does not exist: "+pageName)
+        return None
+
+    # Look for the "page-info" inside the "page-options-container"
+    try:
+        pageInfoDiv=browser.find_element_by_xpath('//*[@id="page-info"]')
+    except SeEx.NoSuchElementException:
+        pageInfoDiv=None
+    except:
+        print("***Oops. Exception while looking for page-info div in "+pageName)
+        return None
+
+    s=pageInfoDiv.text
+    loc=s.find("last edited:")
+    if loc == -1:
+        print("***Oops. couldn't find 'last edited:' in "+pageName)
+        return None
+    loc=loc+len("last edited:")
+    s=s[loc:].strip()
+
+    loc=s.find(",")
+    if loc == -1:
+        print("***Oops. couldn't find triling comma after 'last edited:' in "+pageName)
+        return None
+    s=s[:loc].strip()
+
+    return timestring.Date(s).date
+
 #===================================================================================
 #===================================================================================
 #  Do it!
@@ -310,6 +350,11 @@ if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
         skipPages = f.readlines()
 skipPages = [x.strip() for x in skipPages]  # Remove trailing '\n'
 
+# Remove the skipped pages from the list of pages
+for prefix in ignorePagePrefixes:
+    listOfAllWikiPages=[p for p in listOfAllWikiPages if not p.startswith(prefix) ]
+listOfAllWikiPages=[p for p in listOfAllWikiPages if p not in ignorePages]
+
 # The problem is how to skip looking at the 24,000+ pages which which have not been updated when doing an incremental update.
 # We have the time of last update.
 # We have a list of pages from Wikidot sorted by time of last update, but no dates associated.
@@ -323,13 +368,38 @@ if os.path.exists(os.path.join(historyDirectory, "dateLastCompleteUpdate.txt")):
         dlcu = f.readlines()
 if dlcu == None:
     print("*** No dateLastCompleteUpdate.txt file found in "+historyDirectory)
-    dlcut=timestring.Date("January 1, 1900")
+    dateLastCompleteUpdate=timestring.Date("January 1, 1900")
 else:
-    dlcut=timestring.Date(dlcu).date
+    dateLastCompleteUpdate=timestring.Date(dlcu).date
 
+print("   Date of last compete update is "+str(dateLastCompleteUpdate))
 
 # Find the name of the oldest file newer than this date.  This will be the first file that needs updating.
 # We do this using a binary search of the list of pages sorted by date gotten from Wikidot
+upperindex=len(listOfAllWikiPages)-1
+dateupperindex=GetPageDate(browser, historyDirectory, listOfAllWikiPages[upperindex])
+print("   "+listOfAllWikiPages[upperindex]+" at upperindex "+str(upperindex)+" was last updated "+str(dateupperindex))
+lowerindex=0
+datelowerindex=GetPageDate(browser, historyDirectory, listOfAllWikiPages[lowerindex])
+print("   "+listOfAllWikiPages[lowerindex]+" at index "+str(lowerindex)+" was last updated "+str(datelowerindex))
+
+while True:
+    index=int((upperindex+lowerindex)/2)
+    pname=listOfAllWikiPages[index]
+    date=GetPageDate(browser, historyDirectory, pname)
+    print("   "+pname+" at index " + str(index)+" was last updated "+str(date))
+
+    if date < dateLastCompleteUpdate:
+        lowerindex=index
+        datelowerindex=date
+    else:
+        upperindex=index
+        dateupperindex=date
+
+    if upperindex-lowerindex == 1:
+        break
+
+
 
 
 count=0
@@ -342,16 +412,11 @@ for pageName in listOfAllWikiPages:
     if not foundStarter:
         continue
 
-    skip=False
-    for prefix in ignorePagePrefixes:
-        if pageName.startswith(prefix):
-            skip=True
-            break
-    if skip or pageName in skipPages or pageName in ignorePages:
+    if pageName in skipPages:
         continue
 
     print("   Getting: "+pageName)
-    CreatePageHistory(browser, pageName, historyDirectory)
+    DownloadPageHistory(browser, historyDirectory, pageName)
     if count > 0 and count%100 == 0:
         print("*** "+str(count))
 
