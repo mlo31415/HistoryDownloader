@@ -63,6 +63,13 @@ def CreatePageHistory(browser, pageName, directory):
     # Open the Fancy 3 page in the browser
     browser.get("http://fancyclopedia.org/"+pageName+"/noredirect/t")
 
+    # Get the first two letters in the page's name
+    # These are used to disperse the page directories among many directotoes so as to avoid having so many subdirectores that Windows Explorer breaks when viewing it
+    d1=pageName[0]
+    d2=d1
+    if len(pageName) > 1:
+        d2=pageName[1]
+
     # Page found?
     errortext="The page <em>"+pageName.replace("_", "-")+"</em> you want to access does not exist."
     if errortext in browser.page_source:
@@ -139,7 +146,7 @@ def CreatePageHistory(browser, pageName, directory):
         # This calls for a Regex
         rec=Regex.compile("^"  # Start at the beginning
                           "(\d+)."  # Look for a number at least one digit long followed by a period and space
-                          "( [A-UW-Z]| [A-Z] [A-UW-Z]|)?"  # Look for a single capital letter or two separated by spaces or this could be missing 
+                          "( [A-UW-Z]| [A-Z] [A-UW-Z]|)?"  # Look for a single capital letter or two separated by spaces or this could be missing
                                                         # We skip the V as the final letter to avoid conflict with the next pattern
                           "( V S R | V S )"  # Look for either ' V S ' or ' V S R '
                           "(.*)"  # Look for a name
@@ -237,10 +244,6 @@ def CreatePageHistory(browser, pageName, directory):
             tree=ET.ElementTree(root)
 
             # OK, we have everything.  Start writing it out.
-            d1=pageName[0]
-            d2=d1
-            if len(pageName) > 1:
-                d2=pageName[1]
 
             # Make sure the target directory exists
             seq=("0000"+number)[-4:]
@@ -258,7 +261,7 @@ def CreatePageHistory(browser, pageName, directory):
     # Find the files button and press it
     elem=browser.find_element_by_id('files-button')
     elem.send_keys(Keys.RETURN)
-    time.sleep(0.5)     # Just-in-case
+    time.sleep(0.7)     # Just-in-case
 
     # Wait until the history list has loaded
     wait=WebDriverWait(browser, 10)
@@ -269,6 +272,7 @@ def CreatePageHistory(browser, pageName, directory):
             h=els[i].get_attribute("outerHTML")
             url, linktext=Helpers.GetHrefAndTextFromString(h)
             urllib.request.urlretrieve("http://fancyclopedia.org"+url, os.path.join(os.path.join(directory, d1, d2, pageName, linktext)))
+        print("      "+str(len(els)-1), " files downloaded.")
     except:
         k=0
 
@@ -298,19 +302,37 @@ listOfAllWikiPages=[name if name != "con" else "con-" for name in listOfAllWikiP
 
 # Get the list of already-handled pages
 donePages=[]
-if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
-    with open(os.path.join(historyDirectory, "donelist.txt")) as f:
-        donePages = f.readlines()
-donePages = [x.strip() for x in donePages]  # Remove trailing '\n'
+# if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
+#     with open(os.path.join(historyDirectory, "donelist.txt")) as f:
+#         donePages = f.readlines()
+# donePages = [x.strip() for x in donePages]  # Remove trailing '\n'
 
-ignorePages=["system_list-all-pages", "forum_thread", "forum_start", "forum_category", "forum_recent-posts", "forum_recent-threads", "forum_new-thread", "search_site", "admin_manage",
-            "system_page-tags-list", "system_page-tags", "system_members", "nav_top", "index_tagclubs", "index_tagfanzines", "index_tagconventions", "system_recent-changes", "index_characters",
-            "index_unicode-charmap", "admin_sources", "nav_side", "system_join"]
+ignorePages=[]
 
+ignorePrefixes=["system_", "index_", "forum_", "admin_", "search_"]
+
+count=0
+starter="decal"     # This lets us restart without going back to the beginning
+foundStarter=False
 for pageName in listOfAllWikiPages:
-    if pageName in donePages or pageName in ignorePages:
+    count=count+1
+    if pageName == starter:
+        foundStarter=True
+    if not foundStarter:
         continue
+
+    skip=False
+    for prefix in ignorePrefixes:
+        if pageName.startswith(prefix):
+            skip=True
+            break
+    if skip or pageName in donePages or pageName in ignorePages:
+        continue
+
     print("   Getting: "+pageName)
     CreatePageHistory(browser, pageName, historyDirectory)
+    if count > 0 and count%100 == 0:
+        print("*** "+str(count))
+
 
 i=0
