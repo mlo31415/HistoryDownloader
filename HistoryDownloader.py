@@ -383,6 +383,7 @@ lowerindex=0
 datelowerindex=GetPageDate(browser, historyDirectory, listOfAllWikiPages[lowerindex])
 print("   "+listOfAllWikiPages[lowerindex]+" at index "+str(lowerindex)+" was last updated "+str(datelowerindex))
 
+# Do a binary search of the list looking for the last page which was fully downloaded.
 while True:
     index=int((upperindex+lowerindex)/2)
     pname=listOfAllWikiPages[index]
@@ -399,20 +400,17 @@ while True:
     if upperindex-lowerindex == 1:
         break
 
-
-
-
 count=0
-starter="decal"     # This lets us restart without going back to the beginning
+startPage=pname     # This lets us restart without going back to the beginning. (We can also override this to start at any desired page.)
 foundStarter=False
 for pageName in listOfAllWikiPages:
     count=count+1
-    if pageName == starter:
+    if pageName == startPage:
         foundStarter=True
     if not foundStarter:
         continue
 
-    if pageName in skipPages:
+    if pageName in skipPages:   # This lets us skip specific pages if we wish
         continue
 
     print("   Getting: "+pageName)
