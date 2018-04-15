@@ -6,6 +6,7 @@ import Helpers
 import urllib.request
 import unidecode
 import time
+import timestring
 from xmlrpc import client
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -287,6 +288,8 @@ def CreatePageHistory(browser, pageName, directory):
 #  Do it!
 
 historyDirectory="I:\Fancyclopedia History"
+ignorePages=[]      # Names of pages to be ignored
+ignorePagePrefixes=["system_", "index_", "forum_", "admin_", "search_"]     # Prefixes of names of pages to be ignored
 
 browser=webdriver.Firefox()
 
@@ -300,16 +303,34 @@ listOfAllWikiPages=client.ServerProxy(url).pages.select({"site" : "fancyclopedia
 listOfAllWikiPages=[name.replace(":", "_", 1) for name in listOfAllWikiPages]   # ':' is used for non-standard namespaces on wiki. Replace the first ":" with "_" in all page names because ':' is invalid in Windows file names
 listOfAllWikiPages=[name if name != "con" else "con-" for name in listOfAllWikiPages]   # Handle the "con" special case
 
-# Get the list of already-handled pages
-donePages=[]
-# if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
-#     with open(os.path.join(historyDirectory, "donelist.txt")) as f:
-#         donePages = f.readlines()
-# donePages = [x.strip() for x in donePages]  # Remove trailing '\n'
+# Get the list of pages to be skipped, one page name per line
+skipPages=[]
+if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
+    with open(os.path.join(historyDirectory, "donelist.txt")) as f:
+        skipPages = f.readlines()
+skipPages = [x.strip() for x in skipPages]  # Remove trailing '\n'
 
-ignorePages=[]
+# The problem is how to skip looking at the 24,000+ pages which which have not been updated when doing an incremental update.
+# We have the time of last update.
+# We have a list of pages from Wikidot sorted by time of last update, but no dates associated.
+# At a substantial expense, we can check get the date of last update from the wiki for any page.
+# So the strategy is to start with the oldest page and do a binary search for the last page updated *before* the date of last update.
 
-ignorePrefixes=["system_", "index_", "forum_", "admin_", "search_"]
+# Load the date of last complete update
+dlcu=None
+if os.path.exists(os.path.join(historyDirectory, "dateLastCompleteUpdate.txt")):
+    with open(os.path.join(historyDirectory, "dateLastCompleteUpdate.txt")) as f:
+        dlcu = f.readlines()
+if dlcu == None:
+    print("*** No dateLastCompleteUpdate.txt file found in "+historyDirectory)
+    dlcut=timestring.Date("January 1, 1900")
+else:
+    dlcut=timestring.Date(dlcu).date
+
+
+# Find the name of the oldest file newer than this date.  This will be the first file that needs updating.
+# We do this using a binary search of the list of pages sorted by date gotten from Wikidot
+
 
 count=0
 starter="decal"     # This lets us restart without going back to the beginning
@@ -322,11 +343,11 @@ for pageName in listOfAllWikiPages:
         continue
 
     skip=False
-    for prefix in ignorePrefixes:
+    for prefix in ignorePagePrefixes:
         if pageName.startswith(prefix):
             skip=True
             break
-    if skip or pageName in donePages or pageName in ignorePages:
+    if skip or pageName in skipPages or pageName in ignorePages:
         continue
 
     print("   Getting: "+pageName)
@@ -335,4 +356,4 @@ for pageName in listOfAllWikiPages:
         print("*** "+str(count))
 
 
-i=0
+browser.close()
