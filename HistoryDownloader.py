@@ -6,7 +6,7 @@ import Helpers
 import urllib.request
 import unidecode
 import time
-import timestring
+from datetime import datetime
 from xmlrpc import client
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -317,20 +317,22 @@ def GetPageDate(browser, directory, pageName):
 
     loc=s.find(",")
     if loc == -1:
-        print("***Oops. couldn't find triling comma after 'last edited:' in "+pageName)
+        print("***Oops. couldn't find trailing comma after 'last edited:' in "+pageName)
         return None
     s=s[:loc].strip()
 
-    return timestring.Date(s).date
+    return datetime.strptime(s, '%d %b %Y').date()
 
 #===================================================================================
 #===================================================================================
 #  Do it!
 
+# Settings
 historyDirectory="I:\Fancyclopedia History"
 ignorePages=[]      # Names of pages to be ignored
 ignorePagePrefixes=["system_", "index_", "forum_", "admin_", "search_"]     # Prefixes of names of pages to be ignored
 
+# Instantiate the web browser Selenium will use
 browser=webdriver.Firefox()
 
 # Get the magic URL for api access
@@ -343,17 +345,18 @@ listOfAllWikiPages=client.ServerProxy(url).pages.select({"site" : "fancyclopedia
 listOfAllWikiPages=[name.replace(":", "_", 1) for name in listOfAllWikiPages]   # ':' is used for non-standard namespaces on wiki. Replace the first ":" with "_" in all page names because ':' is invalid in Windows file names
 listOfAllWikiPages=[name if name != "con" else "con-" for name in listOfAllWikiPages]   # Handle the "con" special case
 
-# Get the list of pages to be skipped, one page name per line
+# Remove the skipped pages from the list of pages
+for prefix in ignorePagePrefixes:
+    listOfAllWikiPages=[p for p in listOfAllWikiPages if not p.startswith(prefix) ]
+listOfAllWikiPages=[p for p in listOfAllWikiPages if p not in ignorePages]
+
+# Get the list of individual pages to be skipped, one page name per line
+# If donelist.txt is empty or does not exist, no pages will eb skipped
 skipPages=[]
 if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
     with open(os.path.join(historyDirectory, "donelist.txt")) as f:
         skipPages = f.readlines()
 skipPages = [x.strip() for x in skipPages]  # Remove trailing '\n'
-
-# Remove the skipped pages from the list of pages
-for prefix in ignorePagePrefixes:
-    listOfAllWikiPages=[p for p in listOfAllWikiPages if not p.startswith(prefix) ]
-listOfAllWikiPages=[p for p in listOfAllWikiPages if p not in ignorePages]
 
 # The problem is how to skip looking at the 24,000+ pages which which have not been updated when doing an incremental update.
 # We have the time of last update.
@@ -365,12 +368,13 @@ listOfAllWikiPages=[p for p in listOfAllWikiPages if p not in ignorePages]
 dlcu=None
 if os.path.exists(os.path.join(historyDirectory, "dateLastCompleteUpdate.txt")):
     with open(os.path.join(historyDirectory, "dateLastCompleteUpdate.txt")) as f:
-        dlcu = f.readlines()
+        dlcu = f.readline()
 if dlcu == None:
+    dlcu="1 Jan 1900"
     print("*** No dateLastCompleteUpdate.txt file found in "+historyDirectory)
-    dateLastCompleteUpdate=timestring.Date("January 1, 1900")
-else:
-    dateLastCompleteUpdate=timestring.Date(dlcu).date
+dateLastCompleteUpdate=datetime.strptime(dlcu, '%d %b %Y').date()
+
+del dlcu
 
 print("   Date of last compete update is "+str(dateLastCompleteUpdate))
 
@@ -379,6 +383,7 @@ print("   Date of last compete update is "+str(dateLastCompleteUpdate))
 upperindex=len(listOfAllWikiPages)-1
 dateupperindex=GetPageDate(browser, historyDirectory, listOfAllWikiPages[upperindex])
 print("   "+listOfAllWikiPages[upperindex]+" at upperindex "+str(upperindex)+" was last updated "+str(dateupperindex))
+
 lowerindex=0
 datelowerindex=GetPageDate(browser, historyDirectory, listOfAllWikiPages[lowerindex])
 print("   "+listOfAllWikiPages[lowerindex]+" at index "+str(lowerindex)+" was last updated "+str(datelowerindex))
@@ -399,6 +404,8 @@ while True:
 
     if upperindex-lowerindex == 1:
         break
+
+del lowerindex, datelowerindex, upperindex, dateupperindex, date, index
 
 count=0
 startPage=pname     # This lets us restart without going back to the beginning. (We can also override this to start at any desired page.)
