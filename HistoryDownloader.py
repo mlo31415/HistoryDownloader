@@ -405,6 +405,7 @@ while True:
     if upperindex-lowerindex == 1:
         break
 
+print(str(len(listOfAllWikiPages)-index)+" pages' histories to be downloaded.")
 del lowerindex, datelowerindex, upperindex, dateupperindex, date, index
 
 count=0
