@@ -59,7 +59,7 @@ from selenium.common import exceptions as SeEx
 
 # Read and save the history of one page.
 # Directory is root of all history
-def DownloadPageHistory(browser, directory, pageName):
+def DownloadPageHistory(browser, directory, pageName, justUpdate):
 
     # Open the Fancy 3 page in the browser
     browser.get("http://fancyclopedia.org/"+pageName+"/noredirect/t")
@@ -70,6 +70,19 @@ def DownloadPageHistory(browser, directory, pageName):
     d2=d1
     if len(pageName) > 1:
         d2=pageName[1]
+
+    # Check to see what we have already downloaded.
+    # Any history already downloaded will be in directory/d1/d2/pageName+nnnn, where nnnn is the version number
+    # Read directory/d1/d2 and make a list of the version number of all directories found
+    # The version directories are named Vnnnn
+    dir=os.path.join(directory, d1, d2, pageName)
+    if os.path.exists(dir):
+        existingVersions=[entry for entry in os.scandir(dir) if entry.is_dir()] # All the subdirectory names
+        existingVersions=[entry.name for entry in existingVersions]
+        existingVersions=[entry[1:] for entry in existingVersions if entry[0]=='V' and len(entry) == 5 and entry[1].isdigit() and entry[2].isdigit() and entry[3].isdigit() and entry[4].isdigit()]
+        existingVersions=[int(entry) for entry in existingVersions] # Convert to number
+    else:
+        existingVersions=[]
 
     # Page found?
     errortext="The page <em>"+pageName.replace("_", "-")+"</em> you want to access does not exist."
@@ -409,7 +422,7 @@ print(str(len(listOfAllWikiPages)-index)+" pages' histories to be downloaded.")
 del lowerindex, datelowerindex, upperindex, dateupperindex, date, index
 
 count=0
-startPage=pname     # This lets us restart without going back to the beginning. (We can also override this to start at any desired page.)
+startPage="steven-brust"#pname     # This lets us restart without going back to the beginning. (We can also override this to start at any desired page.)
 foundStarter=False
 for pageName in listOfAllWikiPages:
     count=count+1
@@ -422,7 +435,7 @@ for pageName in listOfAllWikiPages:
         continue
 
     print("   Getting: "+pageName)
-    DownloadPageHistory(browser, historyDirectory, pageName)
+    DownloadPageHistory(browser, historyDirectory, pageName, False)
     if count > 0 and count%100 == 0:
         print("*** "+str(count))
 
