@@ -58,8 +58,8 @@ from selenium.common import exceptions as SeEx
 #     own internal web browser.)
 
 # Read and save the history of one page.
-# Directory is root of all history
-def DownloadPageHistory(browser, directory, pageName, justUpdate):
+# HistoryRoot is root of all history files
+def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
 
     # Open the Fancy 3 page in the browser
     browser.get("http://fancyclopedia.org/"+pageName+"/noredirect/t")
@@ -72,17 +72,23 @@ def DownloadPageHistory(browser, directory, pageName, justUpdate):
         d2=pageName[1]
 
     # Check to see what we have already downloaded.
-    # Any history already downloaded will be in directory/d1/d2/pageName+nnnn, where nnnn is the version number
-    # Read directory/d1/d2 and make a list of the version number of all directories found
+    # Any history already downloaded will be in historyRoot/d1/d2/pageName+nnnn, where nnnn is the version number
+    # Read historyRoot/d1/d2 and make a list of the version number of all directories found
     # The version directories are named Vnnnn
-    dir=os.path.join(directory, d1, d2, pageName)
-    if os.path.exists(dir):
-        existingVersions=[entry for entry in os.scandir(dir) if entry.is_dir()] # All the subdirectory names
-        existingVersions=[entry.name for entry in existingVersions]
+    pagePath=os.path.join(historyRoot, d1, d2, pageName)
+    existingVersions=[]
+    lowestVersionNeeded=0
+    if os.path.exists(pagePath):
+        existingVersions=[entry for entry in os.scandir(pagePath) if entry.is_dir()] # All the subdirectory objects
+        existingVersions=[entry.name for entry in existingVersions] # Make into a list of subdirectory names
         existingVersions=[entry[1:] for entry in existingVersions if entry[0]=='V' and len(entry) == 5 and entry[1].isdigit() and entry[2].isdigit() and entry[3].isdigit() and entry[4].isdigit()]
         existingVersions=[int(entry) for entry in existingVersions] # Convert to number
-    else:
-        existingVersions=[]
+        # Now figure out what the lowest version still needed is. (Knowing this may allow us to optimize page loads.)
+        if len(existingVersions) > 0:
+            for i in range(0, max(existingVersions)+1):
+                if i not in existingVersions:
+                    lowestVersionNeeded=i   # Mote that this will be max+1 if there are no gaps in the list
+                    break
 
     # Page found?
     errortext="The page <em>"+pageName.replace("_", "-")+"</em> you want to access does not exist."
@@ -204,73 +210,83 @@ def DownloadPageHistory(browser, directory, pageName, justUpdate):
             if gps==None:
                 print("***gps is None (2)")
 
-            # The Regex greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
-            # Fix this if necessary
-            user=gps[3]
-            date=gps[4]
-            if user[-2:-1]==" " and user[-1:].isdigit():
-                date=user[-1:]+gps[4]
-                user=user[:-2]
+            # Get the revision number.  Skip it if it's in the list of existing revisions
+            revNum=gps[0]
+            if revNum not in existingVersions:
 
-            # Click on the view source button for this row
-            el.find_elements_by_tag_name("td")[3].find_elements_by_tag_name("a")[1].click()
-            # This while loop, et al, is to allow retries since sometimes it doesn't seem to load in time
-            divRevList=None
-            count=0
-            while divRevList == None and count < 5:
-                try:
-                    divRevList=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody')
-                except SeEx.NoSuchElementException:
-                    # Wait and try again
-                    time.sleep(1)
-                    count=count+1
-            if divRevList == None and count >= 5:
-                print("***Could not get divRevList after five tries.")
+                # The Regex greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
+                # Fix this if necessary
+                user=gps[3]
+                date=gps[4]
+                if user[-2:-1]==" " and user[-1:].isdigit():
+                    date=user[-1:]+gps[4]
+                    user=user[:-2]
 
-            source=None
-            count=0
-            while source == None and count < 5:
-                try:
-                    source=divRevList.find_element_by_xpath('//*[@id="history-subarea"]/div').text
-                except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException):
-                    # Wait and try again
-                    time.sleep(1)
-                    count=count+1
-            if source == None and count >= 5:
-                print("***Could not get source after five tries.")
-            del divRevList
+                # Click on the view source button for this row
+                el.find_elements_by_tag_name("td")[3].find_elements_by_tag_name("a")[1].click()
+                # This while loop, et al, is to allow retries since sometimes it doesn't seem to load in time
+                divRevList=None
+                count=0
+                while divRevList == None and count < 5:
+                    try:
+                        divRevList=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody')
+                    except SeEx.NoSuchElementException:
+                        # Wait and try again
+                        time.sleep(1)
+                        count=count+1
+                if divRevList == None and count >= 5:
+                    print("***Could not get divRevList after five tries.")
 
-            # Write out the xml data
-            root=ET.Element("data")
-            el=ET.SubElement(root, "number")
-            number=str(gps[0])
-            el.text=number
-            el=ET.SubElement(root, "ID")
-            el.text=str(id)
-            el=ET.SubElement(root, "type")
-            el.text=str(gps[1])
-            el=ET.SubElement(root, "name")
-            el.text=str(user)
-            el=ET.SubElement(root, "date")
-            el.text=str(date)
-            el=ET.SubElement(root, "comment")
-            el.text=str(gps[5])
-            # And write the xml out to file <localName>.xml.
-            tree=ET.ElementTree(root)
+                source=None
+                count=0
+                while source == None and count < 5:
+                    try:
+                        source=divRevList.find_element_by_xpath('//*[@id="history-subarea"]/div').text
+                    except (SeEx.NoSuchElementException, SeEx.StaleElementReferenceException):
+                        # Wait and try again
+                        time.sleep(1)
+                        count=count+1
+                if source == None and count >= 5:
+                    print("***Could not get source after five tries.")
+                del divRevList
 
-            # OK, we have everything.  Start writing it out.
+                # Write out the xml data
+                root=ET.Element("data")
+                el=ET.SubElement(root, "number")
+                number=str(gps[0])
+                el.text=number
+                el=ET.SubElement(root, "ID")
+                el.text=str(id)
+                el=ET.SubElement(root, "type")
+                el.text=str(gps[1])
+                el=ET.SubElement(root, "name")
+                el.text=str(user)
+                el=ET.SubElement(root, "date")
+                el.text=str(date)
+                el=ET.SubElement(root, "comment")
+                el.text=str(gps[5])
+                # And write the xml out to file <localName>.xml.
+                tree=ET.ElementTree(root)
 
-            # Make sure the target directory exists
-            seq=("0000"+number)[-4:]
-            dir=os.path.join(directory, d1, d2, pageName, "V"+seq)
-            pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+                # OK, we have everything.  Start writing it out.
 
-            # Write the directory contents
-            tree.write(os.path.join(dir, "metadata.xml"))
-            with open(os.path.join(dir, "source.txt"), 'a') as file:
-                file.write(unidecode.unidecode_expect_nonascii(source))
+                # Make sure the target directory exists
+                seq=("0000"+number)[-4:]    # Add leading zeroes
+                dir=os.path.join(pagePath, "V"+seq)
+                pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+
+                # Write the directory contents
+                tree.write(os.path.join(dir, "metadata.xml"))
+                with open(os.path.join(dir, "source.txt"), 'a') as file:
+                    file.write(unidecode.unidecode_expect_nonascii(source))
 
             i=i+1
+
+        # The history pages are loaded recent (highest version number) first.
+        # Check to see if subsequent pages could *possibly* have a version we need.
+        # If not, end the loop over pages of history lists.
+        if revNum < lowestVersionNeeded:
+            break;
 
     # Download the files currently attached to this page
     # Find the files button and press it
@@ -286,13 +302,13 @@ def DownloadPageHistory(browser, directory, pageName, justUpdate):
         for i in range(1, len(els)):
             h=els[i].get_attribute("outerHTML")
             url, linktext=Helpers.GetHrefAndTextFromString(h)
-            urllib.request.urlretrieve("http://fancyclopedia.org"+url, os.path.join(os.path.join(directory, d1, d2, pageName, linktext)))
+            urllib.request.urlretrieve("http://fancyclopedia.org"+url, os.path.join(os.path.join(pagePath, linktext)))
         print("      "+str(len(els)-1), " files downloaded.")
     except:
         k=0
 
     # Update the donelist
-    with open(os.path.join(directory, "donelist.txt"), 'a') as file:
+    with open(os.path.join(historyRoot, "donelist.txt"), 'a') as file:
         file.write(pageName+"\n")
 
     return
