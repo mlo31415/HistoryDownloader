@@ -7,6 +7,8 @@ import urllib.request
 import unidecode
 import time
 from datetime import datetime
+import dateutil
+import dateutil.parser
 from xmlrpc import client
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -85,11 +87,15 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
         existingVersions=[int(entry) for entry in existingVersions] # Convert to number
         # Now figure out what the lowest version still needed is. (Knowing this may allow us to optimize page loads.)
         if len(existingVersions) > 0:
-            for i in range(0, max(existingVersions)+1):
+            lowestVersionNeeded=max(existingVersions)+1
+            i=0
+            while i < max(existingVersions)+1:
                 if i not in existingVersions:
                     lowestVersionNeeded=i   # Mote that this will be max+1 if there are no gaps in the list
                     break
+                i=i+1
 
+    print("   First version needed: "+str(lowestVersionNeeded))
     # Page found?
     errortext="The page <em>"+pageName.replace("_", "-")+"</em> you want to access does not exist."
     if errortext in browser.page_source:
@@ -137,25 +143,9 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
                 break
 
         firstTime=False
+
         # Get the history list
-        # This while loop, et al, is to allow retries since sometimes it doesn't seem to load in time
-        historyElements=None
-        count=0
-        while historyElements == None and count < 5:
-            try:
-                historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
-                id=historyElements[-1].get_attribute("id").replace("revision-row-", "")   # Just here to trigger an exception if not loaded fully
-                t=historyElements[-1].text   # Just here to trigger an exception if not loaded fully
-            except Exception as exception:
-                # Wait and try again
-                time.sleep(1)
-                count=count+1
-                print("... Retrying historyElements(2): "+type(exception).__name__+"  count="+str(count))
-        if historyElements == None and count >= 5:
-            print("***Could not get historyElements after five tries.")
-
-
-        historyElements=historyElements[1:]  # The first row is column headers, so skip them.
+        historyElements, id=ExtractHistoryList(browser)
 
         # Note that the history list is from newest to oldest, but we don't care since we traverse them all
         # The structure of a line is
@@ -212,7 +202,7 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
 
             # Get the revision number.  Skip it if it's in the list of existing revisions
             revNum=gps[0]
-            if revNum not in existingVersions:
+            if int(revNum) not in existingVersions:
 
                 # The Regex greedy capture of the user name captures the 1st digit of 2-digit dates.  This shows up as the user name ending in a space followed by a single digit.
                 # Fix this if necessary
@@ -275,6 +265,8 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
                 dir=os.path.join(pagePath, "V"+seq)
                 pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
 
+                print("    Loaded V"+seq)
+
                 # Write the directory contents
                 tree.write(os.path.join(dir, "metadata.xml"))
                 with open(os.path.join(dir, "source.txt"), 'a') as file:
@@ -285,7 +277,7 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
         # The history pages are loaded recent (highest version number) first.
         # Check to see if subsequent pages could *possibly* have a version we need.
         # If not, end the loop over pages of history lists.
-        if revNum < lowestVersionNeeded:
+        if int(revNum) < lowestVersionNeeded:
             break;
 
     # Download the files currently attached to this page
@@ -312,6 +304,31 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
         file.write(pageName+"\n")
 
     return
+
+
+def ExtractHistoryList(browser):
+    # This while loop, et al, is to allow retries since sometimes it doesn't seem to load in time
+    count=0
+    while count<5:
+        try:
+            historyElements=browser.find_element_by_xpath('//*[@id="revision-list"]/table/tbody').find_elements_by_xpath("tr")
+            id=historyElements[-1].get_attribute("id").replace("revision-row-", "")  # Just here to trigger an exception if not loaded completely
+            t=historyElements[-1].text  # Just here to trigger an exception if page was not loaded completely and the above data was stale
+
+            historyElements=historyElements[1:]  # The first row is column headers, so skip them.
+            return historyElements, id
+
+        except Exception as exception:
+            # Wait and try again
+            time.sleep(1)
+            count=count+1
+            print("... Retrying historyElements(2): "+type(exception).__name__+"  count="+str(count))
+    if historyElements==None and count>=5:
+        print("***Could not get historyElements after five tries.")
+
+    return None, 0
+
+
 
 #--------------------------------------------------------
 # Read and save the history of one page.
@@ -350,7 +367,8 @@ def GetPageDate(browser, directory, pageName):
         return None
     s=s[:loc].strip()
 
-    return datetime.strptime(s, '%d %b %Y').date()
+    return dateutil.parser.parse(s, default=datetime(1, 1, 1))
+
 
 #===================================================================================
 #===================================================================================
@@ -380,7 +398,7 @@ for prefix in ignorePagePrefixes:
 listOfAllWikiPages=[p for p in listOfAllWikiPages if p not in ignorePages]
 
 # Get the list of individual pages to be skipped, one page name per line
-# If donelist.txt is empty or does not exist, no pages will eb skipped
+# If donelist.txt is empty or does not exist, no pages will be skipped
 skipPages=[]
 if os.path.exists(os.path.join(historyDirectory, "donelist.txt")):
     with open(os.path.join(historyDirectory, "donelist.txt")) as f:
@@ -401,7 +419,7 @@ if os.path.exists(os.path.join(historyDirectory, "dateLastCompleteUpdate.txt")):
 if dlcu == None:
     dlcu="1 Jan 1900"
     print("*** No dateLastCompleteUpdate.txt file found in "+historyDirectory)
-dateLastCompleteUpdate=datetime.strptime(dlcu, '%d %b %Y').date()
+dateLastCompleteUpdate=dateutil.parser.parse(dlcu, default=datetime(1, 1, 1))
 
 del dlcu
 
@@ -438,7 +456,7 @@ print(str(len(listOfAllWikiPages)-index)+" pages' histories to be downloaded.")
 del lowerindex, datelowerindex, upperindex, dateupperindex, date, index
 
 count=0
-startPage="steven-brust"#pname     # This lets us restart without going back to the beginning. (We can also override this to start at any desired page.)
+startPage=pname     # This lets us restart without going back to the beginning. (We can also override this to start at any desired page.)
 foundStarter=False
 for pageName in listOfAllWikiPages:
     count=count+1
