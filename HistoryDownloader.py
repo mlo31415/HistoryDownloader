@@ -164,6 +164,7 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
                           "(\d+ [A-Za-z]{3,3} 2\d{3,3})"  # Look for a date in the 2000s of the form 'dd mmm yyyy'
                           "(.*)$")  # Look for an optional comment
 
+        #TODO: Don't load earlier history pages unless we need to.
         i=0
         while i < len(historyElements):  # We do this kludge because we need to continually refresh historyElements. While it may become stale, at least it doesn't change size
             # Regenerate the history list, as it may have become stale
@@ -282,6 +283,7 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
 
     # Download the files currently attached to this page
     # Find the files button and press it
+    #TODO: Avoid downloading files which already have been downloaded.
     elem=browser.find_element_by_id('files-button')
     elem.send_keys(Keys.RETURN)
     time.sleep(0.7)     # Just-in-case
