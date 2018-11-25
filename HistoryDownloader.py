@@ -107,7 +107,11 @@ def DownloadPageHistory(browser, historyRoot, pageName, justUpdate):
     time.sleep(0.5)     # Just-in-case
 
     # Wait until the history list has loaded
-    WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, 'revision-list')))
+    try:
+        WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, 'revision-list')))
+    except:
+        print("***Oops. Exception while waiting for the history list to load in "+pageName+":  Retrying")
+        WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, 'revision-list')))
 
     # Step over the pages of history lines (if any)
     # The pages are a series of spans creating a series of boxes, each with a number in it.  There is a box labeled "current" and we want to click on the *next* box.
